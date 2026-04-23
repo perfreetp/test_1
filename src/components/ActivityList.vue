@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import dayjs from 'dayjs'
 import { useActivityStorage } from '../composables/useActivityStorage'
 
-const emit = defineEmits(['selectActivity'])
+const emit = defineEmits(['selectActivity', 'previewActivity'])
 
 const {
   activities,
@@ -37,6 +37,11 @@ const handleDeleteActivity = (activityId, e) => {
   if (confirm('确定要删除这个活动吗？此操作不可撤销。')) {
     deleteActivity(activityId)
   }
+}
+
+const handlePreviewActivity = (activityId, e) => {
+  e.stopPropagation()
+  emit('previewActivity', activityId)
 }
 
 const formatTime = (time) => {
@@ -130,6 +135,14 @@ const getActivityStatus = (activity) => {
 
           <div class="card-footer">
             <div class="card-actions">
+              <button 
+                class="action-btn"
+                @click="handlePreviewActivity(activity.id, $event)"
+                title="预览活动"
+              >
+                <span class="action-icon">👁️</span>
+                <span class="action-text">预览</span>
+              </button>
               <button 
                 class="action-btn"
                 @click="handleDuplicateActivity(activity.id, $event)"

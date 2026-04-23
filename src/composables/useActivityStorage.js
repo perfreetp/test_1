@@ -1,10 +1,13 @@
-import { ref, computed, watch } from 'vue'
+import { ref, computed, provide, inject } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 
 const ACTIVITIES_KEY = 'activity-editor-activities'
 const CURRENT_ACTIVITY_ID_KEY = 'activity-editor-current-id'
+const ACTIVITY_STORAGE_KEY = Symbol('activity-storage')
 
-export function useActivityStorage() {
+let globalStorageInstance = null
+
+export function createActivityStorage() {
   const getDefaultActivity = () => ({
     id: Date.now().toString(),
     name: '新建活动',
@@ -30,14 +33,15 @@ export function useActivityStorage() {
   const activity = computed({
     get: () => {
       if (!currentActivityId.value) return null
-      return activities.value.find(a => a.id === currentActivityId.value) || null
+      const found = activities.value.find(a => a.id === currentActivityId.value)
+      return found ? JSON.parse(JSON.stringify(found)) : null
     },
     set: (newValue) => {
       if (!newValue || !currentActivityId.value) return
       const index = activities.value.findIndex(a => a.id === currentActivityId.value)
       if (index !== -1) {
         activities.value[index] = {
-          ...newValue,
+          ...JSON.parse(JSON.stringify(newValue)),
           updatedAt: new Date().toISOString()
         }
       }
@@ -52,6 +56,11 @@ export function useActivityStorage() {
     })
   })
 
+  const getActivityById = (activityId) => {
+    const found = activities.value.find(a => a.id === activityId)
+    return found ? JSON.parse(JSON.stringify(found)) : null
+  }
+
   const createActivity = (name = '新建活动') => {
     const newActivity = {
       ...getDefaultActivity(),
@@ -62,14 +71,14 @@ export function useActivityStorage() {
     }
     activities.value.push(newActivity)
     currentActivityId.value = newActivity.id
-    return newActivity
+    return JSON.parse(JSON.stringify(newActivity))
   }
 
   const selectActivity = (activityId) => {
     const exists = activities.value.find(a => a.id === activityId)
     if (exists) {
       currentActivityId.value = activityId
-      return exists
+      return JSON.parse(JSON.stringify(exists))
     }
     return null
   }
@@ -98,21 +107,27 @@ export function useActivityStorage() {
       }
       activities.value.push(newActivity)
       currentActivityId.value = newActivity.id
-      return newActivity
+      return JSON.parse(JSON.stringify(newActivity))
     }
     return null
   }
 
-  const updateCurrentActivity = (updates) => {
-    if (!currentActivityId.value || !activity.value) return
-    const index = activities.value.findIndex(a => a.id === currentActivityId.value)
+  const updateActivity = (activityId, updates) => {
+    const index = activities.value.findIndex(a => a.id === activityId)
     if (index !== -1) {
       activities.value[index] = {
         ...activities.value[index],
-        ...updates,
+        ...JSON.parse(JSON.stringify(updates)),
         updatedAt: new Date().toISOString()
       }
+      return true
     }
+    return false
+  }
+
+  const updateCurrentActivity = (updates) => {
+    if (!currentActivityId.value) return false
+    return updateActivity(currentActivityId.value, updates)
   }
 
   const ensureDefaultActivity = () => {
@@ -141,17 +156,41 @@ export function useActivityStorage() {
 
   ensureDefaultActivity()
 
-  return {
+  const storage = {
     activity,
     activities: sortedActivities,
     hasActivities,
     currentActivityId,
+    getActivityById,
     createActivity,
     selectActivity,
     deleteActivity,
     duplicateActivity,
+    updateActivity,
     updateCurrentActivity,
     resetCurrentActivity,
     ensureDefaultActivity
   }
+
+  globalStorageInstance = storage
+  return storage
+}
+
+export function provideActivityStorage() {
+  const storage = createActivityStorage()
+  provide(ACTIVITY_STORAGE_KEY, storage)
+  return storage
+}
+
+export function useActivityStorage() {
+  const storage = inject(ACTIVITY_STORAGE_KEY)
+  if (storage) {
+    return storage
+  }
+  
+  if (globalStorageInstance) {
+    return globalStorageInstance
+  }
+  
+  return createActivityStorage()
 }
