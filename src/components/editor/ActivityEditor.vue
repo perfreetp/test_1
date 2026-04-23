@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import Sortable from 'sortablejs'
 import { useActivityStorage } from '../../composables/useActivityStorage'
 import BannerItem from './BannerItem.vue'
@@ -8,7 +8,20 @@ import TimeConfig from './TimeConfig.vue'
 import StatusControl from './StatusControl.vue'
 import ActivityPreview from '../preview/ActivityPreview.vue'
 
-const { activity, resetActivity } = useActivityStorage()
+const emit = defineEmits(['backToList'])
+
+const { 
+  activity, 
+  activities, 
+  currentActivityId,
+  selectActivity, 
+  resetCurrentActivity,
+  createActivity,
+  duplicateActivity,
+  deleteActivity
+} = useActivityStorage()
+
+const showActivitySelector = ref(false)
 
 const isPreviewMode = ref(false)
 const bannerListRef = ref(null)
@@ -17,8 +30,43 @@ const productListRef = ref(null)
 const bannerSortable = ref(null)
 const productSortable = ref(null)
 
+const handleBackToList = () => {
+  emit('backToList')
+}
+
 const togglePreviewMode = () => {
   isPreviewMode.value = !isPreviewMode.value
+}
+
+const handleSelectActivity = (activityId) => {
+  selectActivity(activityId)
+  showActivitySelector.value = false
+}
+
+const handleCreateActivity = () => {
+  createActivity('新建活动')
+  showActivitySelector.value = false
+}
+
+const handleDuplicateActivity = (activityId, e) => {
+  e.stopPropagation()
+  duplicateActivity(activityId)
+}
+
+const handleDeleteActivity = (activityId, e) => {
+  e.stopPropagation()
+  if (confirm('确定要删除这个活动吗？此操作不可撤销。')) {
+    deleteActivity(activityId)
+    if (activity.value === null) {
+      handleBackToList()
+    }
+  }
+}
+
+const handleResetActivity = () => {
+  if (confirm('确定要重置当前活动吗？所有内容将被清空。')) {
+    resetCurrentActivity()
+  }
 }
 
 const addBanner = () => {
@@ -143,11 +191,66 @@ const totalItems = computed(() => {
 </script>
 
 <template>
-  <div class="activity-editor" :class="{ 'preview-mode': isPreviewMode }">
+  <div class="activity-editor" :class="{ 'preview-mode': isPreviewMode }" v-if="activity">
     <!-- 编辑器头部 -->
     <header class="editor-header">
       <div class="header-left">
-        <h1 class="editor-title">活动编辑器</h1>
+        <button class="btn btn-icon btn-back" @click="handleBackToList">
+          <span class="icon">←</span>
+          <span class="text">返回列表</span>
+        </button>
+        <div class="activity-selector" v-if="!isPreviewMode">
+          <button 
+            class="btn btn-outline activity-selector-btn"
+            @click="showActivitySelector = !showActivitySelector"
+          >
+            <span class="icon">📋</span>
+            <span class="text">{{ activity.name || '选择活动' }}</span>
+            <span class="arrow">{{ showActivitySelector ? '▲' : '▼' }}</span>
+          </button>
+          
+          <!-- 活动选择下拉菜单 -->
+          <div class="activity-dropdown" v-if="showActivitySelector">
+            <div class="dropdown-header">
+              <span>活动列表</span>
+              <button class="btn btn-primary btn-sm" @click="handleCreateActivity">
+                + 新建
+              </button>
+            </div>
+            <div class="dropdown-list">
+              <div 
+                v-for="act in activities" 
+                :key="act.id"
+                class="dropdown-item"
+                :class="{ active: act.id === currentActivityId }"
+                @click="handleSelectActivity(act.id)"
+              >
+                <div class="item-info">
+                  <div class="item-name">{{ act.name }}</div>
+                  <div class="item-meta">
+                    {{ act.banners?.length || 0 }} Banner · {{ act.products?.length || 0 }} 商品
+                  </div>
+                </div>
+                <div class="item-actions">
+                  <button 
+                    class="btn-action" 
+                    title="复制活动"
+                    @click="handleDuplicateActivity(act.id, $event)"
+                  >
+                    📋
+                  </button>
+                  <button 
+                    class="btn-action btn-danger" 
+                    title="删除活动"
+                    @click="handleDeleteActivity(act.id, $event)"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         <input 
           type="text" 
           v-model="activity.name"
@@ -160,7 +263,7 @@ const totalItems = computed(() => {
       <div class="header-right">
         <button 
           class="btn btn-outline"
-          @click="resetActivity"
+          @click="handleResetActivity"
           v-if="!isPreviewMode"
         >
           重置
@@ -173,6 +276,13 @@ const totalItems = computed(() => {
         </button>
       </div>
     </header>
+
+    <!-- 点击外部关闭下拉菜单 -->
+    <div 
+      class="dropdown-overlay" 
+      v-if="showActivitySelector"
+      @click="showActivitySelector = false"
+    ></div>
 
     <!-- 预览模式 -->
     <div class="preview-container" v-if="isPreviewMode">
@@ -574,6 +684,182 @@ const totalItems = computed(() => {
   opacity: 0.8;
 }
 
+/* 返回按钮样式 */
+.btn-icon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+}
+
+.btn-back {
+  background: white;
+  color: #666;
+  border: 1px solid #e0e0e0;
+}
+
+.btn-back:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.btn-back .icon {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.btn-back .text {
+  font-size: 13px;
+}
+
+/* 活动选择器样式 */
+.activity-selector {
+  position: relative;
+}
+
+.activity-selector-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  min-width: 200px;
+  justify-content: space-between;
+}
+
+.activity-selector-btn .icon {
+  font-size: 14px;
+}
+
+.activity-selector-btn .text {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-selector-btn .arrow {
+  font-size: 10px;
+  color: #999;
+}
+
+/* 下拉菜单覆盖层 */
+.dropdown-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 99;
+}
+
+/* 下拉菜单 */
+.activity-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 8px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e0e0e0;
+  min-width: 320px;
+  max-height: 400px;
+  overflow: hidden;
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+}
+
+.dropdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  font-weight: 600;
+  color: #333;
+}
+
+.dropdown-list {
+  overflow-y: auto;
+  max-height: 340px;
+}
+
+.dropdown-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.dropdown-item:hover {
+  background: #f5f5f5;
+}
+
+.dropdown-item.active {
+  background: #e6f7ff;
+}
+
+.dropdown-item.active .item-name {
+  color: #1890ff;
+}
+
+.item-info {
+  flex: 1;
+  overflow: hidden;
+}
+
+.item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-meta {
+  font-size: 12px;
+  color: #999;
+  margin-top: 2px;
+}
+
+.item-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 12px;
+}
+
+.btn-action {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.btn-action:hover {
+  background: #f0f0f0;
+}
+
+.btn-action.btn-danger:hover {
+  background: #fff1f0;
+}
+
 /* 响应式 */
 @media (max-width: 1024px) {
   .main-content {
@@ -602,6 +888,20 @@ const totalItems = computed(() => {
   
   .product-grid {
     grid-template-columns: 1fr;
+  }
+  
+  .activity-selector-btn {
+    min-width: 160px;
+  }
+  
+  .activity-dropdown {
+    min-width: 280px;
+    left: auto;
+    right: 0;
+  }
+  
+  .btn-back .text {
+    display: none;
   }
 }
 </style>
