@@ -1,4 +1,4 @@
-import { ref, computed, provide, inject } from 'vue'
+import { ref, computed, provide, inject, watch, onUnmounted } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 
 const ACTIVITIES_KEY = 'activity-editor-activities'
@@ -20,6 +20,19 @@ export function createActivityStorage() {
     products: []
   })
 
+  const deepClone = (obj) => {
+    if (obj === null || typeof obj !== 'object') return obj
+    if (obj instanceof Date) return new Date(obj)
+    if (Array.isArray(obj)) return obj.map(item => deepClone(item))
+    const cloned = {}
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        cloned[key] = deepClone(obj[key])
+      }
+    }
+    return cloned
+  }
+
   const activities = useLocalStorage(ACTIVITIES_KEY, [], {
     mergeDefaults: false,
     writeDefaults: true
@@ -30,21 +43,53 @@ export function createActivityStorage() {
     writeDefaults: true
   })
 
-  const activity = computed({
-    get: () => {
-      if (!currentActivityId.value) return null
-      const found = activities.value.find(a => a.id === currentActivityId.value)
-      return found ? JSON.parse(JSON.stringify(found)) : null
-    },
-    set: (newValue) => {
-      if (!newValue || !currentActivityId.value) return
-      const index = activities.value.findIndex(a => a.id === currentActivityId.value)
-      if (index !== -1) {
-        activities.value[index] = {
-          ...JSON.parse(JSON.stringify(newValue)),
-          updatedAt: new Date().toISOString()
-        }
+  const currentActivity = ref(null)
+
+  const loadActivityToRef = () => {
+    if (!currentActivityId.value) {
+      currentActivity.value = null
+      return
+    }
+    const found = activities.value.find(a => a.id === currentActivityId.value)
+    if (found) {
+      currentActivity.value = deepClone(found)
+    } else {
+      currentActivity.value = null
+    }
+  }
+
+  const saveActivityFromRef = () => {
+    if (!currentActivityId.value || !currentActivity.value) return
+    const index = activities.value.findIndex(a => a.id === currentActivityId.value)
+    if (index !== -1) {
+      activities.value[index] = {
+        ...deepClone(currentActivity.value),
+        updatedAt: new Date().toISOString()
       }
+    }
+  }
+
+  loadActivityToRef()
+
+  const stopCurrentActivityWatch = watch(
+    currentActivity,
+    () => {
+      saveActivityFromRef()
+    },
+    { deep: true }
+  )
+
+  const stopCurrentActivityIdWatch = watch(
+    currentActivityId,
+    () => {
+      loadActivityToRef()
+    }
+  )
+
+  const activity = computed({
+    get: () => currentActivity.value,
+    set: (newValue) => {
+      currentActivity.value = newValue ? deepClone(newValue) : null
     }
   })
 
@@ -58,7 +103,7 @@ export function createActivityStorage() {
 
   const getActivityById = (activityId) => {
     const found = activities.value.find(a => a.id === activityId)
-    return found ? JSON.parse(JSON.stringify(found)) : null
+    return found ? deepClone(found) : null
   }
 
   const createActivity = (name = '新建活动') => {
@@ -71,14 +116,14 @@ export function createActivityStorage() {
     }
     activities.value.push(newActivity)
     currentActivityId.value = newActivity.id
-    return JSON.parse(JSON.stringify(newActivity))
+    return deepClone(newActivity)
   }
 
   const selectActivity = (activityId) => {
     const exists = activities.value.find(a => a.id === activityId)
     if (exists) {
       currentActivityId.value = activityId
-      return JSON.parse(JSON.stringify(exists))
+      return deepClone(exists)
     }
     return null
   }
@@ -99,7 +144,7 @@ export function createActivityStorage() {
     const source = activities.value.find(a => a.id === activityId)
     if (source) {
       const newActivity = {
-        ...JSON.parse(JSON.stringify(source)),
+        ...deepClone(source),
         id: Date.now().toString(),
         name: `${source.name} (副本)`,
         createdAt: new Date().toISOString(),
@@ -107,7 +152,7 @@ export function createActivityStorage() {
       }
       activities.value.push(newActivity)
       currentActivityId.value = newActivity.id
-      return JSON.parse(JSON.stringify(newActivity))
+      return deepClone(newActivity)
     }
     return null
   }
@@ -117,8 +162,14 @@ export function createActivityStorage() {
     if (index !== -1) {
       activities.value[index] = {
         ...activities.value[index],
-        ...JSON.parse(JSON.stringify(updates)),
+        ...deepClone(updates),
         updatedAt: new Date().toISOString()
+      }
+      if (currentActivityId.value === activityId && currentActivity.value) {
+        currentActivity.value = {
+          ...currentActivity.value,
+          ...deepClone(updates)
+        }
       }
       return true
     }
@@ -143,18 +194,25 @@ export function createActivityStorage() {
     if (currentActivityId.value) {
       const index = activities.value.findIndex(a => a.id === currentActivityId.value)
       if (index !== -1) {
-        activities.value[index] = {
+        const defaultActivity = {
           ...getDefaultActivity(),
           id: currentActivityId.value,
           name: activities.value[index].name || '新建活动',
           createdAt: activities.value[index].createdAt,
           updatedAt: new Date().toISOString()
         }
+        activities.value[index] = defaultActivity
+        currentActivity.value = deepClone(defaultActivity)
       }
     }
   }
 
   ensureDefaultActivity()
+
+  const cleanup = () => {
+    if (stopCurrentActivityWatch) stopCurrentActivityWatch()
+    if (stopCurrentActivityIdWatch) stopCurrentActivityIdWatch()
+  }
 
   const storage = {
     activity,
@@ -169,7 +227,8 @@ export function createActivityStorage() {
     updateActivity,
     updateCurrentActivity,
     resetCurrentActivity,
-    ensureDefaultActivity
+    ensureDefaultActivity,
+    cleanup
   }
 
   globalStorageInstance = storage
@@ -179,6 +238,13 @@ export function createActivityStorage() {
 export function provideActivityStorage() {
   const storage = createActivityStorage()
   provide(ACTIVITY_STORAGE_KEY, storage)
+  
+  onUnmounted(() => {
+    if (storage && storage.cleanup) {
+      storage.cleanup()
+    }
+  })
+  
   return storage
 }
 
