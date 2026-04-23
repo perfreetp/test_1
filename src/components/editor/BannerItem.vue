@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { isValidUrl, formatUrl, isValidImageUrl } from '../../utils/validators'
 
 const props = defineProps({
   banner: {
@@ -16,6 +17,7 @@ const emit = defineEmits(['update', 'delete', 'move-up', 'move-down'])
 
 const isEditing = ref(false)
 const localBanner = ref({ ...props.banner })
+const errorMessage = ref('')
 
 const bannerStyle = computed(() => ({
   backgroundImage: `url(${localBanner.value.imageUrl})`,
@@ -25,15 +27,44 @@ const bannerStyle = computed(() => ({
 
 const startEdit = () => {
   localBanner.value = { ...props.banner }
+  errorMessage.value = ''
   isEditing.value = true
 }
 
+const validateForm = () => {
+  errorMessage.value = ''
+  
+  if (localBanner.value.imageUrl && !isValidImageUrl(localBanner.value.imageUrl)) {
+    errorMessage.value = '图片 URL 格式不正确，请输入有效的 URL'
+    return false
+  }
+  
+  if (localBanner.value.linkUrl && !isValidUrl(localBanner.value.linkUrl)) {
+    errorMessage.value = '链接 URL 格式不正确，请输入有效的 URL（如：https://example.com）'
+    return false
+  }
+  
+  return true
+}
+
 const saveEdit = () => {
-  emit('update', { ...localBanner.value, id: props.banner.id })
+  if (!validateForm()) {
+    return
+  }
+  
+  const updatedBanner = { 
+    ...localBanner.value, 
+    id: props.banner.id,
+    linkUrl: localBanner.value.linkUrl ? formatUrl(localBanner.value.linkUrl) : '',
+    imageUrl: localBanner.value.imageUrl ? formatUrl(localBanner.value.imageUrl) : ''
+  }
+  
+  emit('update', updatedBanner)
   isEditing.value = false
 }
 
 const cancelEdit = () => {
+  errorMessage.value = ''
   isEditing.value = false
 }
 
@@ -83,8 +114,10 @@ const moveDown = () => {
         <input 
           type="text" 
           v-model="localBanner.imageUrl" 
-          placeholder="输入图片 URL"
+          placeholder="输入图片 URL（如：https://example.com/banner.jpg）"
+          :class="{ 'input-error': errorMessage && errorMessage.includes('图片') }"
         />
+        <p class="form-hint">支持 http://、https:// 开头的 URL</p>
       </div>
       <div class="form-group">
         <label>标题</label>
@@ -99,9 +132,16 @@ const moveDown = () => {
         <input 
           type="text" 
           v-model="localBanner.linkUrl" 
-          placeholder="输入跳转链接"
+          placeholder="输入跳转链接（如：https://example.com）"
+          :class="{ 'input-error': errorMessage && errorMessage.includes('链接') }"
         />
+        <p class="form-hint">支持 http://、https:// 开头的 URL，自动补充 https:// 前缀</p>
       </div>
+      
+      <div class="error-message" v-if="errorMessage">
+        ⚠️ {{ errorMessage }}
+      </div>
+      
       <div class="edit-actions">
         <button class="btn btn-secondary" @click="cancelEdit">取消</button>
         <button class="btn btn-primary" @click="saveEdit">保存</button>
@@ -238,6 +278,30 @@ const moveDown = () => {
 .form-group input:focus {
   outline: none;
   border-color: #1890ff;
+}
+
+.form-group input.input-error {
+  border-color: #ff4d4f;
+}
+
+.form-group input.input-error:focus {
+  box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.1);
+}
+
+.form-hint {
+  font-size: 11px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.error-message {
+  padding: 10px 12px;
+  background: #fff1f0;
+  border: 1px solid #ffa39e;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #ff4d4f;
+  margin-bottom: 12px;
 }
 
 .edit-actions {

@@ -4,18 +4,21 @@ import { useLocalStorage } from '@vueuse/core'
 const STORAGE_KEY = 'activity-editor-data'
 
 export function useActivityStorage() {
-  const defaultActivity = {
+  const getDefaultActivity = () => ({
     id: Date.now().toString(),
     name: '新建活动',
     startTime: null,
     endTime: null,
-    status: 'draft', // draft, pending, active, ended
+    status: 'draft',
     banners: [],
     products: []
-  }
+  })
+
+  const defaultActivity = getDefaultActivity()
 
   const activity = useLocalStorage(STORAGE_KEY, defaultActivity, {
-    mergeDefaults: true
+    mergeDefaults: false,
+    writeDefaults: true
   })
 
   const saveActivity = () => {
@@ -34,7 +37,8 @@ export function useActivityStorage() {
   }
 
   const resetActivity = () => {
-    activity.value = { ...defaultActivity, id: Date.now().toString() }
+    activity.value = getDefaultActivity()
+    localStorage.removeItem(STORAGE_KEY)
   }
 
   watch(activity, () => {

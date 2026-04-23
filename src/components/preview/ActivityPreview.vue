@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import dayjs from 'dayjs'
+import { formatUrl, isValidUrl } from '../../utils/validators'
 
 const props = defineProps({
   activity: {
@@ -56,6 +57,28 @@ const productStyle = (product) => ({
   backgroundSize: 'cover',
   backgroundPosition: 'center'
 })
+
+const handleBannerClick = (banner) => {
+  if (banner.linkUrl && isValidUrl(banner.linkUrl)) {
+    const url = formatUrl(banner.linkUrl)
+    window.open(url, '_blank')
+  }
+}
+
+const handleProductClick = (product) => {
+  if (product.linkUrl && isValidUrl(product.linkUrl)) {
+    const url = formatUrl(product.linkUrl)
+    window.open(url, '_blank')
+  }
+}
+
+const hasBannerLink = (banner) => {
+  return banner.linkUrl && isValidUrl(banner.linkUrl)
+}
+
+const hasProductLink = (product) => {
+  return product.linkUrl && isValidUrl(product.linkUrl)
+}
 </script>
 
 <template>
@@ -78,10 +101,15 @@ const productStyle = (product) => ({
           v-for="banner in activity.banners" 
           :key="banner.id"
           class="banner-card"
+          :class="{ 'clickable': hasBannerLink(banner) }"
           :style="bannerStyle(banner)"
+          @click="handleBannerClick(banner)"
         >
           <div class="banner-content">
             <div class="banner-title">{{ banner.title || 'Banner 标题' }}</div>
+            <div class="link-hint" v-if="hasBannerLink(banner)">
+              🔗 点击跳转
+            </div>
           </div>
         </div>
       </div>
@@ -99,10 +127,15 @@ const productStyle = (product) => ({
           v-for="product in activity.products" 
           :key="product.id"
           class="product-card"
+          :class="{ 'clickable': hasProductLink(product) }"
+          @click="handleProductClick(product)"
         >
           <div class="product-image" :style="productStyle(product)">
             <div class="image-placeholder" v-if="!product.imageUrl">
               商品图片
+            </div>
+            <div class="link-badge" v-if="hasProductLink(product)">
+              🔗
             </div>
           </div>
           <div class="product-info">
@@ -208,6 +241,16 @@ const productStyle = (product) => ({
   overflow: hidden;
   background: #f5f5f5;
   position: relative;
+  transition: all 0.3s;
+}
+
+.banner-card.clickable {
+  cursor: pointer;
+}
+
+.banner-card.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .banner-card::before {
@@ -233,6 +276,15 @@ const productStyle = (product) => ({
 .banner-title {
   font-size: 18px;
   font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.link-hint {
+  font-size: 12px;
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .product-grid {
@@ -248,8 +300,17 @@ const productStyle = (product) => ({
   transition: all 0.3s;
 }
 
+.product-card.clickable {
+  cursor: pointer;
+}
+
 .product-card:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.product-card.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .product-image {
@@ -265,6 +326,21 @@ const productStyle = (product) => ({
   transform: translate(-50%, -50%);
   color: #999;
   font-size: 14px;
+}
+
+.link-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .product-info {

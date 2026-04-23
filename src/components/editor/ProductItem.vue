@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { isValidUrl, formatUrl, isValidImageUrl } from '../../utils/validators'
 
 const props = defineProps({
   product: {
@@ -16,6 +17,7 @@ const emit = defineEmits(['update', 'delete', 'move-up', 'move-down'])
 
 const isEditing = ref(false)
 const localProduct = ref({ ...props.product })
+const errorMessage = ref('')
 
 const productStyle = computed(() => ({
   backgroundImage: `url(${localProduct.value.imageUrl})`,
@@ -25,15 +27,54 @@ const productStyle = computed(() => ({
 
 const startEdit = () => {
   localProduct.value = { ...props.product }
+  errorMessage.value = ''
   isEditing.value = true
 }
 
+const validateForm = () => {
+  errorMessage.value = ''
+  
+  if (localProduct.value.imageUrl && !isValidImageUrl(localProduct.value.imageUrl)) {
+    errorMessage.value = '图片 URL 格式不正确，请输入有效的 URL'
+    return false
+  }
+  
+  if (localProduct.value.linkUrl && !isValidUrl(localProduct.value.linkUrl)) {
+    errorMessage.value = '商品链接格式不正确，请输入有效的 URL（如：https://example.com/product/1）'
+    return false
+  }
+  
+  if (localProduct.value.price && localProduct.value.price < 0) {
+    errorMessage.value = '售价不能为负数'
+    return false
+  }
+  
+  if (localProduct.value.originalPrice && localProduct.value.originalPrice < 0) {
+    errorMessage.value = '原价不能为负数'
+    return false
+  }
+  
+  return true
+}
+
 const saveEdit = () => {
-  emit('update', { ...localProduct.value, id: props.product.id })
+  if (!validateForm()) {
+    return
+  }
+  
+  const updatedProduct = { 
+    ...localProduct.value, 
+    id: props.product.id,
+    linkUrl: localProduct.value.linkUrl ? formatUrl(localProduct.value.linkUrl) : '',
+    imageUrl: localProduct.value.imageUrl ? formatUrl(localProduct.value.imageUrl) : ''
+  }
+  
+  emit('update', updatedProduct)
   isEditing.value = false
 }
 
 const cancelEdit = () => {
+  errorMessage.value = ''
   isEditing.value = false
 }
 
@@ -87,8 +128,10 @@ const moveDown = () => {
         <input 
           type="text" 
           v-model="localProduct.imageUrl" 
-          placeholder="输入图片 URL"
+          placeholder="输入图片 URL（如：https://example.com/product.jpg）"
+          :class="{ 'input-error': errorMessage && errorMessage.includes('图片') }"
         />
+        <p class="form-hint">支持 http://、https:// 开头的 URL</p>
       </div>
       <div class="form-group">
         <label>商品名称</label>
@@ -106,6 +149,8 @@ const moveDown = () => {
             v-model.number="localProduct.price" 
             placeholder="0.00"
             step="0.01"
+            min="0"
+            :class="{ 'input-error': errorMessage && errorMessage.includes('售价') }"
           />
         </div>
         <div class="form-group">
@@ -115,6 +160,8 @@ const moveDown = () => {
             v-model.number="localProduct.originalPrice" 
             placeholder="0.00"
             step="0.01"
+            min="0"
+            :class="{ 'input-error': errorMessage && errorMessage.includes('原价') }"
           />
         </div>
       </div>
@@ -123,9 +170,16 @@ const moveDown = () => {
         <input 
           type="text" 
           v-model="localProduct.linkUrl" 
-          placeholder="输入商品链接"
+          placeholder="输入商品链接（如：https://example.com/product/1）"
+          :class="{ 'input-error': errorMessage && errorMessage.includes('链接') }"
         />
+        <p class="form-hint">支持 http://、https:// 开头的 URL，自动补充 https:// 前缀</p>
       </div>
+      
+      <div class="error-message" v-if="errorMessage">
+        ⚠️ {{ errorMessage }}
+      </div>
+      
       <div class="edit-actions">
         <button class="btn btn-secondary" @click="cancelEdit">取消</button>
         <button class="btn btn-primary" @click="saveEdit">保存</button>
@@ -282,6 +336,30 @@ const moveDown = () => {
 .form-group input:focus {
   outline: none;
   border-color: #1890ff;
+}
+
+.form-group input.input-error {
+  border-color: #ff4d4f;
+}
+
+.form-group input.input-error:focus {
+  box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.1);
+}
+
+.form-hint {
+  font-size: 11px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.error-message {
+  padding: 10px 12px;
+  background: #fff1f0;
+  border: 1px solid #ffa39e;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #ff4d4f;
+  margin-bottom: 12px;
 }
 
 .form-row {
